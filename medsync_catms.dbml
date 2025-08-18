@@ -1,0 +1,220 @@
+Project MedSync_CATMS {
+  database_type: 'PostgreSQL'
+  Note: '''
+    # MedSync CATMS Database Schema
+
+    Comprehensive clinic management system supporting:
+    - Multi-branch operations (Colombo, Kandy, Galle)
+    - Patient registration and management
+    - Appointment scheduling
+    - Treatment recording and billing
+    - Insurance claims processing
+    - Complete audit trail
+
+    **Author:** Group 5
+    **Version:** 1.0
+    **Date:** August 2025
+  '''
+}
+
+// =======================
+// AUTHENTICATION & USERS
+// =======================
+
+Table user {
+  id text [pk, note: 'Unique user identifier']
+  username text [not null, unique, note: 'Login username']
+  password_hash text [not null, note: 'Hashed password for security']
+  role text [not null, default: 'staff', note: 'User role: doctor, staff, admin, patient']
+  created_at timestamp [default: `now()`, note: 'Account creation timestamp']
+  updated_at timestamp [default: `now()`, note: 'Last profile update']
+}
+
+Table session {
+  id text [pk, note: 'Session identifier']
+  user_id text [not null, ref: > user.id, note: 'Reference to user']
+  expires_at timestamptz [not null, note: 'Session expiration time']
+}
+
+// =======================
+// ORGANIZATIONAL STRUCTURE
+// =======================
+
+Table branches {
+  id serial [pk]
+  name text [not null]
+  location text [not null]
+  address text [not null]
+  phone text
+  email text
+  operating_hours text [default: '08:00-20:00']
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+}
+
+Table medical_staff {
+  id serial [pk]
+  user_id text [not null, ref: > user.id]
+  first_name text [not null]
+  last_name text [not null]
+  specialty text
+  license_number text
+  phone text
+  email text
+  branch_id integer [not null, ref: > branches.id]
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+}
+
+// =======================
+// PATIENT MANAGEMENT
+// =======================
+
+Table patients {
+  id text [pk, note: 'Patient ID with branch prefix (e.g., COL001, KDY002)']
+  first_name text [not null]
+  last_name text [not null]
+  date_of_birth date [not null]
+  gender text [not null]
+  address text [not null]
+  phone text [not null]
+  email text
+  emergency_contact_name text
+  emergency_contact_phone text
+  emergency_contact_relation text
+  registered_branch integer [not null, ref: > branches.id]
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+// =======================
+// INSURANCE MANAGEMENT
+// =======================
+
+Table insurance_providers {
+  id serial [pk]
+  name text [not null]
+  contact_info text
+  processing_requirements text
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+}
+
+Table patient_insurance {
+  id serial [pk]
+  patient_id text [not null, ref: > patients.id]
+  provider_id integer [not null, ref: > insurance_providers.id]
+  policy_number text [not null]
+  coverage_details text
+  expiration_date date
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+}
+
+// =======================
+// CLINICAL OPERATIONS
+// =======================
+
+Table treatments {
+  id serial [pk]
+  service_code text [not null, unique]
+  name text [not null]
+  description text
+  price decimal(10,2) [not null]
+  category text
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table appointments {
+  id serial [pk]
+  patient_id text [not null, ref: > patients.id]
+  doctor_id integer [not null, ref: > medical_staff.id]
+  branch_id integer [not null, ref: > branches.id]
+  appointment_date date [not null]
+  appointment_time text [not null]
+  status text [not null, default: 'scheduled']
+  appointment_type text [default: 'regular']
+  notes text
+  cancellation_reason text
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table treatment_records {
+  id serial [pk]
+  appointment_id integer [not null, ref: > appointments.id]
+  treatment_id integer [not null, ref: > treatments.id]
+  quantity integer [default: 1]
+  unit_price decimal(10,2) [not null]
+  total_price decimal(10,2) [not null]
+  consultation_notes text
+  recorded_by integer [not null, ref: > medical_staff.id]
+  created_at timestamp [default: `now()`]
+}
+
+// =======================
+// FINANCIAL MANAGEMENT
+// =======================
+
+Table invoices {
+  id serial [pk]
+  patient_id text [not null, ref: > patients.id]
+  appointment_id integer [not null, ref: > appointments.id]
+  invoice_number text [not null, unique]
+  total_amount decimal(10,2) [not null]
+  insurance_covered decimal(10,2) [default: 0]
+  patient_responsible decimal(10,2) [not null]
+  paid_amount decimal(10,2) [default: 0]
+  outstanding_balance decimal(10,2) [not null]
+  status text [not null, default: 'pending']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table payments {
+  id serial [pk]
+  invoice_id integer [not null, ref: > invoices.id]
+  amount decimal(10,2) [not null]
+  payment_method text [not null]
+  payment_date timestamp [default: `now()`]
+  transaction_reference text
+  processed_by text [not null, ref: > user.id]
+  notes text
+  created_at timestamp [default: `now()`]
+}
+
+Table insurance_claims {
+  id serial [pk]
+  invoice_id integer [not null, ref: > invoices.id]
+  patient_insurance_id integer [not null, ref: > patient_insurance.id]
+  claim_number text [not null, unique]
+  claim_amount decimal(10,2) [not null]
+  approved_amount decimal(10,2)
+  status text [not null, default: 'submitted']
+  submission_date timestamp [default: `now()`]
+  response_date timestamp
+  rejection_reason text
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+// =======================
+// AUDIT AND COMPLIANCE
+// =======================
+
+Table audit_log {
+  id serial [pk]
+  user_id text [not null, ref: > user.id]
+  action text [not null]
+  table_name text [not null]
+  record_id text [not null]
+  old_values text
+  new_values text
+  timestamp timestamp [default: `now()`]
+  ip_address text
+  user_agent text
+}
+
